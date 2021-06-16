@@ -1,0 +1,13 @@
+C51 COMPILER V9.54   12864                                                                 07/02/2020 00:22:16 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE 12864
+OBJECT MODULE PLACED IN .\OutPut\12864.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE User\12864.c LARGE OPTIMIZE(8,SIZE) BROWSE DEBUG OBJECTEXTEND PRINT(.\Ou
+                    -tPut\12864.lst) TABS(2) OBJECT(.\OutPut\12864.obj)
+
+line level    source
+
+*** ERROR C318 OF User\12864.c: can't open file 'User\12864.c'
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  1 ERROR(S)

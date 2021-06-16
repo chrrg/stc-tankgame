@@ -1,0 +1,495 @@
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE GAMECORE
+OBJECT MODULE PLACED IN .\OutPut\gameCore.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE Source\gameCore.c LARGE OPTIMIZE(8,SIZE) BROWSE DEBUG OBJECTEXTEND PRINT
+                    -(.\OutPut\gameCore.lst) TABS(2) OBJECT(.\OutPut\gameCore.obj)
+
+line level    source
+
+   1          /*
+   2          CH GameCore
+   3          Version: 1.0
+   4          Author: CH
+   5          Date: 2020-07-01
+   6          */
+   7          #include "gameCore.h"
+   8          #include "stdlib.h"
+   9          #include "user\IAP15W4K61S4.h"
+  10          /************* 12864LCD引脚定义 *************/
+  11          #define LCD_data  P0       //数据口
+  12          sbit LCD_RS  =  P3^5;      //寄存器选择输入 
+  13          sbit LCD_RW  =  P3^6;      //液晶读/写控制
+  14          sbit LCD_EN  =  P3^7;      //液晶使能控制
+  15          sbit LCD_PSB =  P4^6;      //串/并方式控制
+  16          sbit LCD_RST =  P4^7;      //液晶复位端口
+  17          void _nop_ (void);
+  18          uchar code mask1[]={0x80,0x40,0x20,0x10,0x8,0x4,0x2,0x1};//10000000 01000000 ~ 00000001
+  19          uchar code mask2[]={0x7F,0xBF,0xDF,0xEF,0xF7,0xFB,0xFD,0xFE};//01111111 10111111 11011111
+  20          uchar code mask3[]={0,0x80,0xC0,0xE0,0xF0,0xF8,0xFC,0xFE};//10000000 11000000 ~ 11111110
+  21          uchar code mask4[]={0,0x1,0x3,0x7,0xF,0x1F,0x3F,0x7F};//00000001 00000011 ~ 01111111
+  22          uchar code number58[]={//5*8 0123456789数字
+  23            0x31,0x0C,0x61,0x3C,0xCF,0x31,0x80,0x4B,0x12,0x93,0x21,0x29,0x4A,0x40,0x49,0x02,
+  24            0x13,0x21,0x01,0x4A,0x40,0x49,0x04,0x65,0x39,0xC2,0x31,0xC0,0x49,0x08,0x15,0x05,
+  25            0x24,0x48,0x40,0x49,0x10,0x97,0x85,0x24,0x4A,0x40,0x33,0x9E,0x61,0x38,0xC4,0x31,
+  26            0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+  27          };
+  28          static unsigned char xdata gameCore_membuff[3100];//3KB内存
+  29          sbit LED2 = P4^2;
+  30          #define delayNOP(); {_nop_();_nop_();_nop_();_nop_();};
+  31          bit lcd_busy(){
+  32   1        bit result;
+  33   1        LCD_RS = 0;
+  34   1        LCD_RW = 1;
+  35   1        LCD_EN = 1;
+  36   1        delayNOP();
+  37   1        result = (bit)(P0&0x80);
+  38   1        LCD_EN = 0;
+  39   1        return result; 
+  40   1      }
+  41          /*******************************************************************/
+  42          /*                                                                 */
+  43          /*写指令数据到LCD                                                  */
+  44          /*RS=L，RW=L，E=高脉冲，D0-D7=指令码。                             */
+  45          /*                                                                 */
+  46          /*******************************************************************/
+  47          void lcd_wcmd(uchar cmd){
+  48   1        while(lcd_busy());
+  49   1        LCD_RS = 0;
+  50   1        LCD_RW = 0;
+  51   1        LCD_EN = 0;
+  52   1        _nop_();
+  53   1        _nop_(); 
+  54   1        P0 = cmd;
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 2   
+
+  55   1        delayNOP();
+  56   1        LCD_EN = 1;
+  57   1        delayNOP();
+  58   1        LCD_EN = 0;  
+  59   1      }
+  60          /*******************************************************************/
+  61          /*                                                                 */
+  62          /*写显示数据到LCD                                                  */
+  63          /*RS=H，RW=L，E=高脉冲，D0-D7=数据。                               */
+  64          /*                                                                 */
+  65          /*******************************************************************/
+  66          void lcd_wdat(uchar dat){
+  67   1        while(lcd_busy());
+  68   1        LCD_RS = 1;
+  69   1        LCD_RW = 0;
+  70   1        LCD_EN = 0;
+  71   1        P0 = dat;
+  72   1        delayNOP();
+  73   1        LCD_EN = 1;
+  74   1        delayNOP();
+  75   1        LCD_EN = 0; 
+  76   1      }
+  77          /*******************************************************************/
+  78          /*                                                                 */
+  79          /*  LCD初始化设定                                                  */
+  80          /*                                                                 */
+  81          /*******************************************************************/
+  82          void delay_fast(unsigned int ii){
+  83   1        while(ii-->0)_nop_();
+  84   1      }
+  85          void lcd_init(){
+  86   1        LCD_PSB = 1;         //并口方式
+  87   1        LCD_RST = 0;     //液晶复位
+  88   1        LCD_RST = 1;      
+  89   1        lcd_wcmd(0x34);      //扩充指令操作
+  90   1        lcd_wcmd(0x30);      //基本指令操作
+  91   1        lcd_wcmd(0x0C);      //显示开，关光标
+  92   1        lcd_wcmd(0x01);      //清除LCD的显示内容
+  93   1      }
+  94          
+  95          void lcd_Clear(){//清屏 
+  96   1        lcd_wcmd(0x34);
+  97   1        delay_fast(15);
+  98   1        lcd_wcmd(0x30);
+  99   1        delay_fast(15);
+ 100   1        lcd_wcmd(0x01);
+ 101   1        delay_fast(15);
+ 102   1      }
+ 103          //////////////////////////////////////////////////12864驱动结束//////////////////////////////////////////
+ 104          void initGameCore(){
+ 105   1        init_mempool(gameCore_membuff, sizeof(gameCore_membuff));
+ 106   1        lcd_init();//显示屏初始化
+ 107   1      }
+ 108          GamePic* newGamePic(unsigned char* pic,unsigned int w,unsigned int h){
+ 109   1        GamePic *gamePic;
+ 110   1        gamePic = (GamePic *)calloc(1,sizeof(GamePic));//使用calloc会初始化为0
+ 111   1        gamePic->pic=pic;
+ 112   1        gamePic->w=w;
+ 113   1        gamePic->h=h;
+ 114   1        return gamePic;
+ 115   1      }
+ 116          void clsGameRender(){
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 3   
+
+ 117   1        uint i,j;
+ 118   1        //lcd_wcmd(0x34);
+ 119   1        for(i=0;i<32;i++){
+ 120   2          lcd_wcmd(0x80+i);lcd_wcmd(0x80);
+ 121   2          for(j=0;j<16;j++)lcd_wdat(0);
+ 122   2          delay_fast(10);
+ 123   2        }
+ 124   1        for(i=0;i<32;i++){ 
+ 125   2          lcd_wcmd(0x80+i);lcd_wcmd(0x88);
+ 126   2          for(j=0;j<16;j++)lcd_wdat(0);    
+ 127   2          delay_fast(10);
+ 128   2        }
+ 129   1        //lcd_wcmd(0x36);
+ 130   1      }
+ 131          GameCore* newGameCore(uint w,uint h){//初始化游戏内核，保证数据初使化
+ 132   1        GameCore* gameCore=(GameCore *)calloc(1,sizeof(GameCore));//使用calloc会初始化为0
+ 133   1        //下面开始初始化游戏引擎
+ 134   1        gameCore->screen_width=w;//w=128;
+ 135   1        gameCore->screen_height=h;//h=64;
+ 136   1        gameCore->bitmap=(uchar *)calloc(1,w*h/8);//修改这个
+ 137   1        gameCore->buffer=(uchar *)calloc(1,w*h/8);//这个是一次性画上去
+ 138   1        lcd_Clear();//向12864发送清屏指令
+ 139   1        return gameCore;
+ 140   1      }
+ 141          //void doCallback(GameCore* gameCore){
+ 142            //int i=0;
+ 143            //if(gameCore==NULL)return;
+ 144            
+ 145            /*do{
+ 146              if(gameCore->Callback[i]!=NULL)gameCore->Callback[i]();
+ 147            }while(++i<MAX_CALLBACK_COUNT);*/
+ 148          //}
+ 149          void drawPixel(GameCore* game,uchar x,uchar y,boolean result){
+ 150   1        if(x<0||y<0||x>=game->screen_width||y>=game->screen_height)return;
+ 151   1        if(result){
+ 152   2          game->bitmap[game->screen_width/8*y+x/8]|=mask1[x%8];
+ 153   2        }else
+ 154   1          game->bitmap[game->screen_width/8*y+x/8]&=mask2[x%8];
+ 155   1      }
+ 156          void drawByte(GameCore* game,uchar x,uchar y,uchar result){//这里的x是byte坐标
+ 157   1        game->bitmap[game->screen_width/8*y+x]=result;
+ 158   1      }
+ 159          /*
+ 160          void drawByteLeft(GameCore* game,uchar x,uchar y,uchar result,int n){//11100000
+ 161            //将result的前n位写入game中
+ 162            game->bitmap[game->screen_width/8*y+x]&=mask4[8-n];//取原来的后8-n位
+ 163            game->bitmap[game->screen_width/8*y+x]&=result&mask3[n];//取新的前n位
+ 164          }
+ 165          void drawByteRight(GameCore* game,uchar x,uchar y,uchar result,int n){//00000111
+ 166            game->bitmap[game->screen_width/8*y+x]&=mask3[8-n];//取原来的前8-n位
+ 167            game->bitmap[game->screen_width/8*y+x]&=result&mask4[n];//取后n位合并
+ 168          }
+ 169          void drawByteLeftRight(GameCore* game,uchar x,uchar y,uchar result,int n,int n2){//0001 1100 n=3 n2=2
+ 170            game->bitmap[game->screen_width/8*y+x]&=mask3[n]|mask4[n2]&mask4[8-n]&mask3[8-n2]&result;
+ 171          }
+ 172          */
+ 173          boolean getPixel(GamePic* gamePic,uint x,uint y){
+ 174   1        int w;
+ 175   1        w=gamePic->w;
+ 176   1        if(w%8!=0)w+=8-w%8;
+ 177   1        return (gamePic->pic[w*y/8+x/8]&mask1[x%8])>>(7-x%8);
+ 178   1      }
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 4   
+
+ 179          uchar getByte(GamePic* gamePic,uint x,uint y){//这里x是byte坐标
+ 180   1        int w;
+ 181   1        w=gamePic->w;//12
+ 182   1        if(w%8!=0){w+=8-w%8;}
+ 183   1        return gamePic->pic[w/8*y+x];
+ 184   1      }
+ 185          boolean getPixelFromGame(GameCore* game,uint x,uint y){
+ 186   1        return (game->buffer[game->screen_width/8*y+x/8]&mask1[x%8])>>(7-x%8);
+ 187   1      }
+ 188          void doDrawObject(GameCore* game,GameObject* gameObject){//画一个对象
+ 189   1        int i,j,x,y,w,h;
+ 190   1        if(gameObject->pic==NULL)return;
+ 191   1        x=gameObject->x;//待渲染对象的X像素坐标横轴
+ 192   1        y=gameObject->y;//待渲染对象的Y像素坐标纵轴
+ 193   1        w=gameObject->pic->w;//待渲染的对象宽像素
+ 194   1        h=gameObject->pic->h;//待渲染的对象高像素
+ 195   1        
+ 196   1        if(x%8==0&&w%8==0){//快速渲染组件
+ 197   2          //if(w%8==0){
+ 198   2            for(j=0;j<h;j++)//纵轴
+ 199   2              for(i=0;i<w/8;i++)//横轴
+ 200   2                drawByte(game,x/8+i,j+y,getByte(gameObject->pic,i,j));
+ 201   2          /*}else{
+ 202   2            for(j=0;j<h;j++){//纵轴
+ 203   2              for(i=0;i<w/8;i++)//横轴
+ 204   2                drawByte(game,x/8+i,j+y,getByte(gameObject->pic,i,j));
+ 205   2              i=0;
+ 206   2              drawByteLeft(game,x/8+i,j+y,getByte(gameObject->pic,i,j),w%8);
+ 207   2            }
+ 208   2          }*/
+ 209   2        }else{
+ 210   2          
+ 211   2          /*if(w%8==0){
+ 212   2            for(j=0;j<h;j++){//纵轴
+ 213   2              i=0;
+ 214   2              if(w>=8-x%8){
+ 215   2                drawByteRight(game,i+x/8,j,getByte(gameObject->pic,i,j)>>(x%8),8-x%8);
+ 216   2                for(i=1;i<(w+x%8)/8;i++){
+ 217   2                  
+ 218   2                  //drawByte(game,x/8+i,j+y,getByte(gameObject->pic,i,j)<<(x%8));
+ 219   2                }
+ 220   2              }else{
+ 221   2                drawByteLeftRight(game,i+x/8,j,getByte(gameObject->pic,i,j)>>(x%8),x%8,8-w-x%8);
+ 222   2              }
+ 223   2            }
+ 224   2          }
+ 225   2          x%8;
+ 226   2          if(w%8==0){
+ 227   2            
+ 228   2          }else{
+ 229   2            
+ 230   2          }*/
+ 231   2          //LED2=~LED2;
+ 232   2          //通用渲染组件 性能低
+ 233   2          
+ 234   2          //if(w%8!=0)w+=8-w%8;
+ 235   2          for(j=0;j<h;j++)//纵轴
+ 236   2            for(i=0;i<w;i++)//横轴
+ 237   2              if(getPixel(gameObject->pic,i,j))drawPixel(game,x+i,y+j,1);else drawPixel(game,x+i,y+j,0);
+ 238   2        }
+ 239   1      }
+ 240          void doDrawView(GameCore* game,GameObject* gameObject) reentrant{//画一层
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 5   
+
+ 241   1        int i=0;
+ 242   1        if(gameObject->isDisplay==0)return;
+ 243   1        doDrawObject(game,gameObject);
+ 244   1        do{
+ 245   2          if(gameObject->children[i]==NULL)return;
+ 246   2          doDrawView(game,gameObject->children[i]);
+ 247   2        }while(++i<MAX_GAMEOBJECT_COUNT);
+ 248   1      }
+ 249          void setDisplay(GameObject* gameObject,boolean is){
+ 250   1        gameObject->isDisplay=is;
+ 251   1      }
+ 252          void doDraw(GameCore* gameCore){//渲染一帧
+ 253   1        int i;
+ 254   1        if(gameCore==NULL)return;
+ 255   1        if(gameCore->rootGameObject==NULL)return;
+ 256   1        for(i=0;i<1024;i++)gameCore->bitmap[i]=0;
+ 257   1        if(gameCore->beforeDrawCallback!=NULL)gameCore->beforeDrawCallback();
+ 258   1        doDrawView(gameCore,gameCore->rootGameObject);
+ 259   1        if(gameCore->afterDrawCallback!=NULL)gameCore->afterDrawCallback();
+ 260   1      }
+ 261          void doGameFullRender(GameCore* gameCore){
+ 262   1        uchar *bmp;
+ 263   1        uchar i,j;
+ 264   1        int n=0;
+ 265   1        bmp=gameCore->bitmap;
+ 266   1        lcd_wcmd(0x34);
+ 267   1        for(i=0;i<32;i++){
+ 268   2          lcd_wcmd(0x80+i);
+ 269   2          lcd_wcmd(0x80);
+ 270   2          for(j=0;j<16;j++)lcd_wdat(bmp[n++]);
+ 271   2          delay_fast(15);
+ 272   2        }
+ 273   1        for(i=0;i<32;i++)
+ 274   1        { 
+ 275   2          lcd_wcmd(0x80+i);
+ 276   2          lcd_wcmd(0x88);
+ 277   2          for(j=0;j<16;j++)lcd_wdat(bmp[n++]);
+ 278   2          delay_fast(15);
+ 279   2        }
+ 280   1        lcd_wcmd(0x36);
+ 281   1      }
+ 282          void doGameRender(GameCore* gameCore){//将缓冲区发送到屏幕
+ 283   1        int i,j,w,h,n=0;
+ 284   1        boolean isUpdate=false;//是否有更新
+ 285   1        if(gameCore==NULL)return;
+ 286   1        if(gameCore->fpsTime+100<gameCore->time){
+ 287   2          gameCore->fpsTime=gameCore->time;
+ 288   2          gameCore->fps=gameCore->fpsCount;
+ 289   2          gameCore->fpsCount=0;
+ 290   2        }
+ 291   1        gameCore->fpsCount++;
+ 292   1        doDraw(gameCore);
+ 293   1        //doGameFullRender(gameCore);return;//完全渲染
+ 294   1        
+ 295   1        w=(int)gameCore->screen_width /4;//  128/4=32
+ 296   1        h=(int)gameCore->screen_height/4;//  64 /4=16
+ 297   1        
+ 298   1        for(i=0;i<w;i++){//0~32
+ 299   2          for(j=0;j<h;j+=2){//0~16
+ 300   3            n=i*16+j;
+ 301   3            if(gameCore->render_flag==0||gameCore->buffer[n]!=gameCore->bitmap[n] || gameCore->buffer[n+1]!=gameCor
+             -e->bitmap[n+1]){
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 6   
+
+ 302   4              if(!isUpdate){lcd_wcmd(0x34);isUpdate=true;delay_fast(15);}
+ 303   4              lcd_wcmd(0x80+i);//先写入水平坐标值 
+ 304   4              lcd_wcmd(0x80+j/2);//写入垂直坐标值
+ 305   4              lcd_wdat(gameCore->buffer[n]=gameCore->bitmap[n]);
+ 306   4              lcd_wdat(gameCore->buffer[n+1]=gameCore->bitmap[n+1]);
+ 307   4              delay_fast(15);
+ 308   4            }
+ 309   3          }//0~16 一行像素绘制完成
+ 310   2        }//上半屏
+ 311   1        for(i=0;i<w;i++){//0~32
+ 312   2          for(j=0;j<h;j+=2){
+ 313   3            n=512+i*16+j;
+ 314   3            if(gameCore->render_flag==0||gameCore->buffer[n]!=gameCore->bitmap[n]||gameCore->buffer[n+1]!=gameCore-
+             ->bitmap[n+1]){
+ 315   4              if(!isUpdate){lcd_wcmd(0x34);isUpdate=true;delay_fast(15);}
+ 316   4              lcd_wcmd(0x80+i);//先写入水平坐标值
+ 317   4              lcd_wcmd(0x88+j/2);//写入垂直坐标值
+ 318   4              lcd_wdat(gameCore->buffer[n]=gameCore->bitmap[n]);
+ 319   4              lcd_wdat(gameCore->buffer[n+1]=gameCore->bitmap[n+1]);
+ 320   4              delay_fast(15);
+ 321   4            }
+ 322   3          }//0~16 一行像素绘制完成
+ 323   2        }//下半屏
+ 324   1        if(isUpdate){lcd_wcmd(0x36);}//写完数据,开图形显示
+ 325   1        gameCore->render_flag=1;
+ 326   1        
+ 327   1      }
+ 328          void FreeGameCore(GameCore* game){//释放游戏对象 非释放所有内存
+ 329   1        free(game);
+ 330   1        game=NULL;
+ 331   1      }
+ 332          void DestroyGameCore(GameCore* game){//销毁游戏对象 释放游戏所有对象并释放所有内存
+ 333   1        game=game;
+ 334   1        //free(game);
+ 335   1        //game=NULL;
+ 336   1      }
+ 337          GameObject* findElementByIdFromGameObject(GameObject* gameObject,uchar id) reentrant{
+ 338   1        int i=0;
+ 339   1        if(gameObject->id==id)return gameObject;
+ 340   1        do{
+ 341   2          if(gameObject->children[i]!=NULL){
+ 342   3            GameObject* result;
+ 343   3            result=findElementByIdFromGameObject(gameObject->children[i],id);
+ 344   3            if(result!=NULL)return result;
+ 345   3          }
+ 346   2        }while(++i<MAX_GAMEOBJECT_COUNT);
+ 347   1        return NULL;
+ 348   1      }
+ 349          GameObject* findElementById(GameCore* game,uchar id){//从游戏中找到指定id的元素
+ 350   1        return findElementByIdFromGameObject(game->rootGameObject,id);
+ 351   1      }
+ 352          GameObject* newGameObject(){
+ 353   1        GameObject *gameObject = (GameObject *)calloc(1,sizeof(GameObject));//使用calloc会初始化为0 malloc则不会
+ 354   1        gameObject->isDisplay=true;//默认显示
+ 355   1        return gameObject;
+ 356   1      }
+ 357          void setGameObjectPos(GameObject* gameObject,uint x,uint y) reentrant{//设置对象位置
+ 358   1        gameObject->x=x;
+ 359   1        gameObject->y=y;
+ 360   1      }
+ 361          void setGameObjectSize(){
+ 362   1        //不允许设置游戏对象大小 只能通过设置纹理来改变游戏大小
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 7   
+
+ 363   1      }
+ 364          void setRootGameObject(GameCore* game,GameObject* gameObject){//设置根游戏对象
+ 365   1        game->rootGameObject=gameObject;
+ 366   1      }
+ 367          void setGameObjectBitmap(GameObject* gameObject,GamePic *gamePic){//设置对象纹理（图像）
+ 368   1        gameObject->pic=gamePic;
+ 369   1      }
+ 370          void FreeGameObject(GameObject* gameObject){
+ 371   1        free(gameObject);
+ 372   1        gameObject=NULL;
+ 373   1      }
+ 374          void setGamePicOnGameObject(GamePic* pic,GameObject* obj) reentrant{
+ 375   1        //if(obj->pic!=NULL)free(obj->pic);
+ 376   1        obj->pic=pic;//指向新的纹理
+ 377   1      }
+ 378          boolean appendChild(GameObject* parent,GameObject *child){//添加一个游戏对象到游戏中
+ 379   1        int i=0;
+ 380   1        do{
+ 381   2          if(parent->children[i]==NULL){
+ 382   3            parent->children[i]=child;
+ 383   3            return true;
+ 384   3          }
+ 385   2        }while(++i<MAX_GAMEOBJECT_COUNT);
+ 386   1        return false;
+ 387   1      }
+ 388          boolean removeChild(GameObject* parent,GameObject *child){//从游戏中删除一个游戏对象
+ 389   1        int i=0;
+ 390   1        do{
+ 391   2          if(parent->children[i]==child){
+ 392   3            parent->children[i]=NULL;
+ 393   3            return true;
+ 394   3          }
+ 395   2        }while(++i<MAX_GAMEOBJECT_COUNT);
+ 396   1        return false;
+ 397   1      }
+ 398          void drawOneNumber(GameCore *game,unsigned char number,uint x,uint y){
+ 399   1        int i,j,n,offset;
+ 400   1        if(number>9||number<0)return;
+ 401   1        //n=number*5/8;
+ 402   1        //offset=(number*5)%8;
+ 403   1        for(j=0;j<8;j++){//列
+ 404   2          for(i=0;i<5;i++){//行
+ 405   3            n=(number*5+i)/8+j*7;
+ 406   3            offset=(number*5+i)%8;
+ 407   3            if((number58[n]&mask1[offset])>>(7-offset))
+ 408   3              drawPixel(game,x+i,y+j,1);
+ 409   3            else
+ 410   3              drawPixel(game,x+i,y+j,0);
+ 411   3            /*if((number58[n]&mask1[offset+i+j*5])>>(7-offset))
+ 412   3              drawPixel(game,x+i,y+j,1);
+ 413   3            else
+ 414   3              drawPixel(game,x+i,y+j,0);*/
+ 415   3          }
+ 416   2        }
+ 417   1      }
+ 418          void drawNumber(GameCore *game,unsigned long number,uint x,uint y) reentrant{
+ 419   1        unsigned long n;
+ 420   1        int count=0;
+ 421   1        n=number;
+ 422   1        do{
+ 423   2          n/=10;
+ 424   2          count++;
+C51 COMPILER V9.54   GAMECORE                                                              07/03/2020 22:05:51 PAGE 8   
+
+ 425   2        }while(n!=0);
+ 426   1        //count位数
+ 427   1        n=number;
+ 428   1        while(count-->0){
+ 429   2          drawOneNumber(game,n%10,x+5*count,y);
+ 430   2          n/=10;
+ 431   2        }
+ 432   1      }
+ 433          void* mem_calloc(uint leng){
+ 434   1        return calloc(1,leng);
+ 435   1      }
+ 436          /*boolean addCallBack(GameCore* game,void (*fn)()){//添加一个回调到游戏中
+ 437            int i=0;
+ 438            do{
+ 439              if(game->Callback[i]==NULL){
+ 440                game->Callback[i]=fn;//添加成功
+ 441                return true;
+ 442              }
+ 443            }while(++i<MAX_GAMEOBJECT_COUNT);
+ 444            return false;
+ 445          }
+ 446          boolean removeCallBack(GameCore* game,void (*fn)()){//移除游戏回调
+ 447            int i=0;
+ 448            do{
+ 449              if(game->Callback[i]==fn){
+ 450                game->Callback[i]=NULL;
+ 451                return true;
+ 452              }
+ 453            }while(++i<MAX_GAMEOBJECT_COUNT);
+ 454            return false;
+ 455          }*/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4716    ----
+   CONSTANT SIZE    =     88    ----
+   XDATA SIZE       =   3100     137
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

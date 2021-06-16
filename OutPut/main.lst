@@ -1,0 +1,91 @@
+C51 COMPILER V9.54   MAIN                                                                  07/03/2020 23:28:50 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\OutPut\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE Source\main.c LARGE OPTIMIZE(8,SIZE) BROWSE DEBUG OBJECTEXTEND PRINT(.\O
+                    -utPut\main.lst) TABS(2) OBJECT(.\OutPut\main.obj)
+
+line level    source
+
+   1          #include "includes.h"
+   2          
+   3          sbit LED1 = P5^5;//运行灯
+   4          sbit LED2 = P4^2;
+   5          //sbit KEY  = P3^3;//自带按键
+   6          
+   7          sbit LCD_PSB =  P4^6;      //串/并方式控制
+   8          sbit LCD_RST =  P4^7;      //液晶复位端口
+   9          
+  10          //定义任务堆栈
+  11          
+  12          OS_STK Task1Stk[MaxStkSize+1];
+  13          OS_STK Task2Stk[MaxStkSize+1];
+  14          OS_STK Task3Stk[MaxStkSize+1];
+  15          OS_STK TaskFeedStk[MaxStkSize+1];
+  16          
+  17          void Task_Feed(void *ppdata) reentrant{ET0=1;for(;;){WDT_CONTR = 0x3f;H_DOG = ~H_DOG;OSTimeDly(OS_TICKS_PE
+             -R_SEC*3);}}//喂狗专属
+*** WARNING C280 IN LINE 17 OF Source\main.c: 'ppdata': unreferenced local variable
+  18          void Task1(void *ppdata) reentrant{//监听输入
+  19   1        //ppdata = ppdata;
+  20   1        ET0=1;
+  21   1        for(;;){
+  22   2          TankGame_Input(OSTimeGet());
+  23   2          OSTimeDly(10);
+  24   2        }
+  25   1      }
+*** WARNING C280 IN LINE 18 OF Source\main.c: 'ppdata': unreferenced local variable
+  26          
+  27          void Task2(void *ppdata) reentrant{//游戏渲染程序
+  28   1        //ppdata=ppdata;
+  29   1        for(;;){
+  30   2          TankGame_Render();
+  31   2          OSTimeDly(2);
+  32   2        }
+  33   1      }
+*** WARNING C280 IN LINE 27 OF Source\main.c: 'ppdata': unreferenced local variable
+  34          void Task3(void *ppdata) reentrant{//测试
+  35   1        //ppdata=ppdata;
+  36   1        for(;;){
+  37   2          LED1=~LED1;//红灯 0亮1灭
+  38   2          OSTimeDly(100);
+  39   2        }
+  40   1      }
+*** WARNING C280 IN LINE 34 OF Source\main.c: 'ppdata': unreferenced local variable
+  41          //Game game;
+  42          
+  43          void main(void){
+  44   1        OSInit();
+  45   1        //初始化定时器
+  46   1        TMOD &= 0xF0;TMOD |= 0x01;TR0 = 1;
+  47   1        //芯片IO口初始化
+  48   1        P0M0 = 0X00;P0M1 = 0X00;P1M0 = 0X00;P1M1 = 0X00;P2M0 = 0X00;P2M1 = 0X00;P3M0 = 0X00;P3M1 = 0X00;P4M0 = 0X
+             -00;P4M1 = 0X00;
+C51 COMPILER V9.54   MAIN                                                                  07/03/2020 23:28:50 PAGE 2   
+
+  49   1        
+  50   1        TankGame_Init();//游戏初始化
+  51   1        OSTaskCreate(Task1,(void*)0,&Task1Stk[0],0);//交互
+  52   1        OSTaskCreate(Task2,(void*)0,&Task2Stk[0],1);//渲染
+  53   1        OSTaskCreate(Task3,(void*)0,&Task3Stk[0],2);//测试使用
+  54   1        OSTaskCreate(Task_Feed,(void*)0,&TaskFeedStk[0],3);//喂狗 优先级数字越小越优先
+  55   1        OSStart();
+  56   1      }
+*** WARNING C294 IN LINE 25 OF Source\main.c: unreachable code
+*** WARNING C294 IN LINE 33 OF Source\main.c: unreachable code
+*** WARNING C294 IN LINE 40 OF Source\main.c: unreachable code
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    320    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    224    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  7 WARNING(S),  0 ERROR(S)
